@@ -1,0 +1,88 @@
+---
+layout: post
+title: PinLater，异步作业执行系统A(an asynchronous job execution system)
+date: '2014-07-12T22:49:00+08:00'
+tags:
+- "后台任务"
+tumblr_url: http://yalong.tumblr.com/post/91551273235/pinlater异步作业执行系统aan-asynchronous-job-execution
+---
+<div>当用户点击PinIt按钮时，在后端需要做大量事情。所有缩略图的生成、画板缩略图的更新、向Pinner或者画板的关注者扇出（<span>fanned out</span>）Pin。如果Pin应该被添加到分类Feed、垃圾检查、搜索索引等，我们也需要评估。</div>
+<div></div>
+<div>这些工作非常重要，但并不需要在我们向用户确认成功之前做完。这里我们引入了异步作业执行系统，我们需要对作业进行排队，在晚些时候来执行这些动作，并且确保它们最终被执行。另一种情况是当大批作业需要被预先安排和执行，并且为应对后台系统暂时不可用的情况而需要重试，例如每周生成和发送数百万封Email给Pinner的工作流。下面就来看看我们是如何开发我们称之为“PinLater”的异步作业执行系统的。</div>
+<div></div>
+<h4><strong>评估方案（Evaluating options）</strong></h4>
+<div></div>
+<div>我们最初实现的解决方案是基于<a href="https://github.com/binarydud/pyres">Pyres</a>，但它有一些局限性：</div>
+<div></div>
+<div>
+<ul><li>作业执行是最尽力的（best effort），也就是说它没有成功确认（ACK）机制。</li>
+<li>单个作业类型的状态缺乏可见性，因为作业是被塞进(clubbed into)有九个优先等级的单组队列集合</li>
+<li>系统不是完全可配置和管理，例如没有扼杀作业执行或配置重试的能力</li>
+<li>它绑定Redis作为后端存储并且只能运行Python写的Job，这两个限制是我们不能继续接受的</li>
+<li>它没有内置支持作业预安排执行功能，但我们需要这个功能</li>
+</ul><div></div>
+</div>
+<div><span>我们看了一些其他开源队列或发布/订阅系统的实现,没有提供我们所需要的最小功能集,如基于时间的调度优先级和可靠的ACK,或适合我们规模的。Amazon Simple Queue Service(SQS)可能会满足我们的许多要求,但对于这样一个关键的基础设施,我们想自己掌握它并根据需要扩展特性，这就是为什么我们要开发PinLater。</span></div>
+<div><span> </span></div>
+<div><span><span> </span></span></div>
+<div><strong><span>异步作业执行设计（</span><span>Designing for execution of asynchronous jobs）</span></strong></div>
+<div><strong><span> </span></strong></div>
+<div></div>
+<div>在构建PinLater时，我们保留了以下设计要点：</div>
+<div>
+<ul><li>PinLater是一个用于异步作业调度和执行的<a href="http://thrift.apache.org/">Thrift</a> 服务。通过它的API提供3个动作：入队（ <span>enqueue）</span>、出队( <span>dequeue )</span>和ACK，构成核心接口。</li>
+<li>PinLater不必知道作业的细节。从它的角度看，作业体（Job body）仅仅是一个不透明的字节序列。每个作业都关联了一个队列和一个优先级，以及被称为“run_after”的时间戳，它定义作业符合运行条件的最小时间（默认情况下，作业是被立即执行，但也可以使用未来的某个时间覆盖）</li>
+<li>当一个作业入队以后，PinLater将其发送到后端保存并跟踪它。当有出队请求时，它把在这个时刻点能运行的作业（基于run_after时间戳）中优先级最高的作业返回给请求。通常每个PinLater集群关联一个或多个Worker池，Worker池负责执行属于该集群中队列子集中的作业。Workers连续的抢作业，执行它们并根据执行的成功与否向PinLater回复积极或消极的ACK。</li>
+<li>在我们使用PinLater时，每种作业类型一对一的映射到特定队列。队列中作业体的解析是由入队客户端和worker池通过约定一起负责。一对一映射并不是强制的，但我们发现在管理作业中非常有用，并具有良好的可视性。</li>
+</ul></div>
+<div><span><span><span> <img alt="image" src="http://38.media.tumblr.com/3d94f4f80feeba54673c36d5e854f76f/tumblr_inline_n8ltg23USE1qcfuzk.png"/></span></span></span></div>
+<h4><strong>作业状态机（Job state machine）</strong><span><br/></span></h4>
+<div></div>
+<div>新入队的作业处于PENDING状态，当它变成符合执行条件（基于优先级和它的run_after时间戳）时，它能被worker出队，此时状态被变成RUNNING。</div>
+<div>如果worker执行完成，它将发送一个成功ACK返回，作业将被变成SUCCEEDED状态。为了诊断目的，成功的作业短时间内将被保留（通常为一天），然后被垃圾回收。</div>
+<div>如果作业执行失败，worker将发送一个失败的ACK返回，此时PinLater将检查作业是否允许重试，如果允许则重新将作业回到PENDING状态。如果不允许，作业将变成FAILED状态。为了诊断目的（或可能需要手工重试），失败的作业将在PinLater中保留几天。当第一次入队时，通过numAttemptsAllowed参数的设置来控制允许重试多少次。PinLater允许worker在发送失败ACK时指定延时。这种延时能被用来实现每个作业任意重试策略，例如：固定延时重试，指数后退（exponential backoff），或它们的组合。</div>
+<div><span><span><span> <img alt="image" src="http://38.media.tumblr.com/20ce160f321ac140f9d77ce664f87c38/tumblr_inline_n8lthrtNiF1qcfuzk.png"/></span></span></span></div>
+<div></div>
+<div><br/><div></div>
+<div><span> </span></div>
+<div>
+<p>如果作业被worker出队（宣称（claimed））<span>后，在几分钟内没有收到worker发生的ACK，PinLater认为作业丢失并将它视为失败。它将根据是否允许重试自动变成PENDING或FAILED状态。</span></p>
+<p>结束作业的垃圾回收以及宣称超时处理（claim timeout handling）是通过PinLater thrift 服务器内部的一个预先安排的执行者来完成。执行者还为每次运行做日志统计，以及为长期分析导出数据。</p>
+<p><strong>PinLater的Python Worker框架</strong></p>
+</div>
+<div><span>除了PinLater服务，我们还提供一个Python Worker框架，它实现了PinLater出队/ACK协议并管理Python作业执行。添加新的作业只需要通过几行配置就能告诉PinLater集群作业应该被运行，队列应该被使用以及其他的作业自定义配置（例如：重试策略，尝试执行的次数等）。在这时，工程师只需要关注作业</span><span>自身的</span><span>逻辑。</span></div>
+<div><span> </span></div>
+<div><span>尽管Python框架能够从早期的系统中平稳的过渡作业并且支持绝大多数新作业，我们的一些客户已经用其他语言实现了PinLater worker（像Java和C++）。PinLater&rsquo;s 作业的无关设计（PinLater不必知道作业的细节）和简单的Thrift协议使得实现相对简单。</span></div>
+<div></div>
+<h4><strong>实现细节</strong>（Implementation details）</h4>
+<div></div>
+<div>PinLater Thrift服务器是用Java编写的，并利用Twitter's  <a href="http://twitter.github.io/finagle/">Finagle</a> RPC框架。我们目前提供2种存储后端：MySQL和Redis。</div>
+<div>MySQL用于相对较低吞吐量的用例和安排较长周期的作业，因此能够从磁盘存储作业中受益。Redis用于高吞吐作业队列。</div>
+<div></div>
+<div>MySQL被选为disk-backed后端是因为实现预安排作业队列需要它提供事务查询能力。正如你所料的，锁竞争（<span>lock contention）</span>是一个问题，我们使用了一些策略来减轻它，包括为每个优先级别使用单独的表，为出队选择查询使用UPDATE <span>… LIMIT代替</span><span>SELECT FOR UPDATE，并仔细调整Schemas和二级索引，以适应这种类型的工作负载。</span></div>
+<div><span> </span></div>
+<div><span>Redis被选为in-memory后端是由于它需要复杂的数据结构支持，例如有序集合。因为单线程，Redis没有锁竞争（</span><span>lock contention）问题，但我们必须实现优化，使得工作负载更有效，包括使用Lua脚本以减少不必要的往返。</span></div>
+<div><span> </span></div>
+<div><span>通过切分后端存储到多个服务器上实现水平扩展。后端实现使用一个“free”的分片模式（当作业入队时随机选择片（shards））。</span><span>它使得添加新的片(shards)更简单以及确保片之间有更好的负载均衡。我们实现了一个片健康监控器，对每个独立的片进行监控跟踪，并且当</span><span>由于机器失败、网络问题或者死锁（MySQL中的情况）引起的不正常行为时拿出轮换片。在自动处理操作问题中已经证明监控器是无价的，否则可能导致高错误率并且随时的呼叫操作员。</span></div>
+<div></div>
+<h4><strong>生产经验（Production experience）</strong></h4>
+<div></div>
+<div><span>PinLater已经被使用在生产环境数月了，</span><span>我们基于Pyres的</span><span>遗留</span><span>系统在2014年第一季度完全弃用。PinLater运行成百上千的作业类型，聚合处理速率每秒超过100000。这些作业波动很大，受多个参数影响，包括运行时间、频率、CPU和网络密集,作业体大小,编程语言,队列的在线与离线,需要接近实时执行,而不是被提前安排时间。公平地说几乎在Pinterest上的每一个行动或通知发送都在某种程度上</span><span>依赖</span><span>PinLater。这个服务已经成长为Pinterest最关键的任务和被广泛使用的基础设施。</span></div>
+<div></div>
+<div>PinLater的操作模型是为每个工程师团队部署独立的集群或者作业逻辑分组。目前大约有10个集群，包括一个专门用于测试，另一个专门用于临时的一次性作业。每个团队一个集群模式允许更好的隔离作业，最重要的是，允许每个团队配置警告阈值和其他操作参数以适合他们的情况。几乎每个操作问题都出现在PinLater中的某个具体作业或由于后端服务的不可用性时。<span>因此警报处理由团队自己直接处理会让问题更快的解决。</span></div>
+<div></div>
+<h4><strong>可观察性和可管理性（Observability and manageability）</strong></h4>
+
+<div><span>一个最大痛点是遗留作业队列系统很难管理和操作。因此,当设计PinLater,我们相当关注在这方面如何可以改善。</span></div>
+<div>
+<div></div>
+<div>像Pinterest上的每个服务一样，PinLater针对服务的健康暴露一系列有用的统计数据，我们纳入到操作仪表盘和图表中。此外,PinLater有一个集群状态仪表盘，提供了集群的工作快照。</div>
+<div><img alt="image" src="http://38.media.tumblr.com/78860ace13ebff3332965e7e87135a99/tumblr_inline_n8ltiy6pfo1qcfuzk.png"/></div>
+</div>
+<div></div>
+<div><span>PinLater还提供了两个特性,极大地帮助提高可管理性:每个队列上的速度限制和可配置重试策略。每个队列上速度限制允许操作员在系统中的任何队列上限制</span><span>出列速度,甚至完全停止出列,这可以在后端系统陷入困境后快速的帮助减轻负荷,或防止慢的高优先级作业导致其他作业挨饿。支持可配置重试策略允许部署策略以适合每个用例。我们的默认策略允许10次重试,前5次使用线性延迟,其余使用指数退回（</span><span>exponential backoff</span><span>）。这一策略允许系统</span><span>从大多数持续后端故障</span><span>类型</span><span>和中断中</span><span>自动恢复。作业拥有者可以配置任意其他策略以适合他们的用例。</span></div>
+<div></div>
+<div>我们希望今年能开源PinLater，请继续关注。</div>
+<div></div>
+<div>原文来源：http://engineering.pinterest.com/post/91288882494/pinlater-an-asynchronous-job-execution-system</div>
+</div>

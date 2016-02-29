@@ -1,0 +1,87 @@
+---
+layout: post
+title: "从头构建关注模型"
+date: '2014-04-21T09:46:00+08:00'
+tags:
+- pinterest
+- graph
+tumblr_url: http://yalong.tumblr.com/post/83364908609/从头构建关注模型
+---
+<h2>Pinterest关注模型和兴趣图谱</h2>
+
+<p>Facebook主要的关注关系是两个用户之间的相互关系，而Twitter是典型的1对多。在Pinterest上，关注可以是单向的，但超出了对个体的关注，延伸到兴趣。随着人们关注更多的画板和人，他们的首页动态(home feed)变得更加符合他们的兴趣，并且进一步构建他们的兴趣图谱。</p>
+
+<p>例如，如果安德烈关在鲍勃，她将关注他所有的画板，如果他创建一个新的画板，她将自动关注这个画板。如果安德烈关注Bob的食谱画板，她在她的首页动态中看到他在画板上的所有Pin。安德烈也将被列为该画板的关注者。我们称画板的关注者为隐性的关注者（之前用户与用户之间的关注称为显性的关注者）。</p>
+
+<p><i><b>Action: 关注用户</b></i></p>
+<img src="http://38.media.tumblr.com/428ef91fb38bd5204d778f007c776251/tumblr_inline_n4cy2zbBae1qcfuzk.png" alt="image"/><p><b><i>Action: </i></b><b><i>关注画板</i></b></p>
+<img src="http://33.media.tumblr.com/78117664a5354d11426e8e870a36154c/tumblr_inline_n4cy3aGB7V1qcfuzk.png" alt="image"/><img src="http://33.media.tumblr.com/251338910b19120d76ff1364ce832a73/tumblr_inline_n4cy5iZa0K1qcfuzk.png" alt="image"/><p><b><i>Action: </i></b><b><i>取消关注画板</i></b></p>
+<img src="http://38.media.tumblr.com/9cae6d75e4f3ec37a25713bd60a05ec5/tumblr_inline_n4cy5qHz1x1qcfuzk.png" alt="image"/><p><b><i>隐性关系</i></b><b><i> (</i></b><b><i>反向</i></b><b><i>)</i></b></p>
+<img src="http://38.media.tumblr.com/16617e10af958d9f264f6bb3072390a8/tumblr_inline_n4cy6jbXFr1qcfuzk.png" alt="image"/><p>关注模式看似复杂，但它为Pinner提供了更简单的体验。</p>
+
+<p>为例如“用户A是否关注了用户B ？”这类常用查询提供低延迟，为对可能有数百万追随者的整个列表进行分页提供可接受的延时。界面也显示用户的关注者和用户关注的人以及画板关注者的准确计数以及分页列表。我们希望接受延时是因为在所有关注者中获得一页通常是离线任务部分完成的，就像Pin的扇出(fanning out)。</p>
+
+<p>几乎所有的页面要么显示用户关注者/用户关注的人的数量，要么执行检查，看看登录用户是否已经关注了画板或用户正在查看。这需要网站的关注服务处理高吞吐量和大规模。理想情况下，服务应该留有余量，以支持内部实验（Ideally the service should leave headroom for additional throughput to support internal experiments），以及坚持分布式系统通用模式：横向扩展，高可用性，没有数据丢失，没有单点故障（ SPOF ） 。</p>
+
+<p> </p>
+<h2>构建服务最大的挑战</h2>
+<p>我们没有找到能够满足我们要求（如在这一规模上高效的图操作）的任何现成的开源项目。</p>
+<p>基于MySQL存储和Memcached缓存的传统模式达到了极限。</p>
+
+<p>缓存图数据是困难的，因为只有当整个用户（顶点）的整个子图被缓存时，缓存才有用。但这很快会导致尝试缓存整个图。</p>
+
+<p>缓存也意味着，像查询“用户A是否关注用户B？”要么在缓存中，要么不在缓存中。很多情况往往不能直接回答“否”（即用户A没有关注用户B），这会导致缓存未命中时需要从持久化存储中进行代价高昂的查找。</p>
+
+<h2>关注者图（follower graph)的内部工作原理</h2>
+<p>整个Pinterest关注者图的总体规模相对较小，所以加载整个图到内存中是可行的。</p>
+
+<p>Redis存储图，通过用户ID分片，Redis的AOF功能每秒更新到磁盘以避免重要数据丢失。由于Redis的是单线程的，我们运行Redis的多个实例，以充分利用CPU核心。每个Redis的实例提供一个虚拟的碎片（shard），这使得当一台机器上的实例达到容量极限时很容易被分割。</p>
+
+<h2>深入挖掘数据模型</h2>
+<p>在理解我们所选择的数据模型之前，让我们来总结一下关注服务的常用操作。我们需要有效应对诸如“用户A是否关注用户B ”的查询，在搜索页面上支持过滤查询“这25个用户中我关注了哪些用户？” ，获得输入Pin扇出的用户或画板的所有关注者。为了响应这些查询，我们为每用户维护下列关系：</p>
+
+<p>l  用户显性的关注列表</p>
+<p>l  用户隐性的关注列表，也就是用户只关注他一个或多个画板</p>
+<p>l  用户的显性粉丝列表</p>
+<p>l  用户的隐性粉丝列表</p>
+<p>l  用户显性关注画板的列表</p>
+<p>l  用户显性不关注画板的列表</p>
+
+<p>我们还维护每个画板的关系：</p>
+<p>l  画板明确的关注者</p>
+<p>l  画板明确的不关注者（unfollowers）</p>
+
+<p>实现这些关系相对应的Redis数据结构（每个用户） ：</p>
+
+<p>l  Redis SortedSet，以时间戳作为Score，用来存储用户显性的关注。我们使用的SortedSet的原因有两个：第一，产品要求用户应该按时间倒序排列，第二，有序的集合允许我们通过分页获得ID列表</p>
+<p>l  Redis SortedSet，以时间戳作为Score，，用于存储用户隐性的关注</p>
+<p>l  Redis SortedSet，以时间戳作为Score，，用于存储用户显性的粉丝</p>
+<p>l  Redis SortedSet，以时间戳作为Score，，用于存储用户隐性的粉丝</p>
+<p>l  Redis Set 用来存储显性关注的画板</p>
+<p>l  Redis Set 用来存储显性不关注的画板</p>
+
+<p>每个画板的关系对应的Redis数据结构：</p>
+<p>l  Redis Hash 用来存储一个画板显性的关注者 (注：个人觉得应该用Set)</p>
+<p>l  Redis Set 用来存储一个画板显式的不关注者（unfollowers）</p>
+
+<p>整个用户ID空间被分成8192虚拟分片。我们把一个虚拟分片对应一个Redis DB，而每一台机器上运行多个Redis的实例（从8到32 ），这取决于这些实例分片的内存和CPU的消耗。同样，我们每个Redis实例中允许多个Redis DB。</p>
+
+<p>当Redis的机器无论是达到内存或CPU阈值时，我们将通过水平或垂直拆分它。垂直分片一个Redis的机器就是简单的对半切割运行在机器上的Redis实例。我们开启一个新的master作为现有master的slave，一旦slaving完成，我们把它作为新的Master，把原先Redis实例的一半迁移到新Master。</p>
+
+<p>我们使用 <a href="http://zookeeper.apache.org/">Zookeeper</a> 来存储分片的配置。由于Redis的是单线程的服务器，这很重要，它能够水平分割，以充分利用机器的所有核。</p>
+
+<p> </p>
+<h2>避免紧急按钮(Avoiding the Panic Button)：备份和故障场景</h2>
+<p>我们通过Redis主-从配置运行集群，Slave作为热备份。Master失败时，故障转移到Slave并作为Master，并且启动一个新的Slave或者重新使用旧的Master作为新的Slave。我们依赖ZooKeeper能够快速的完成。</p>
+<p>Amazon EBS上的每个Master Redis实例（和Slave实例）的写是被配置成AOF。这将确保如果Redis实例意外终止，那么丢失的数据仅限于1秒的更新。Slave Redis实例每小时也执行BGsave然后加载到一个更持久化的存储（Amazon S3）。这个副本也被Map Reduce工作（Jobs）使用，用于分析。</p>
+
+<p>作为一个生产系统，我们需要一些失败模式来保护自己。正如前面提到的，如果主服务器宕机，我们将手动迁移到Slave。如果单个主Redies实例重启，我们依赖monit重启并从AOF恢复，这意味着分片上的1秒内的数据将丢失。如果Slave主机宕机，我们启动一个新的替代。如果单个Slave Redis实例宕机，我们依赖monit使用AOF重启。因为我们会遇到AOF或BGsave文件腐败，我们BGsave并且每小时备份到S3。注意，大文件会引发BGsave诱导延时（induced delays），通过分片方案减小Redis数据能够缓解这个问题。</p>
+<h2>来自深夜黑客的经验教训</h2>
+<ul><li>从长远来看，广泛而深度覆盖的单元测试会节省时间。为服务的推出计划一个较长的烘烤时间也是理想的。</li>
+<li>我们可以通过语言或原生支持异步调用的框架避免Bug。</li>
+<li>一些小的特性，我们使用Redis的LUA特性维护写的一致性。我们期望遇到小的集合，但是发现一小部分用户取消关注的画板数量异常的大，可能引发高CPU使用(strcpy)。</li>
+</ul><p>主从机制意味着当master失败时，一些分片将不能写入。一个未来的改善可能是主/从的故障自动转移，以降低当master不能使用时的等待时间。理想情况下，我们也希望投资在灾难发生情况下的修复能力，以便从S3备份中还原。改进的另一个领域是我们thrift客户端连接的均衡负载。</p>
+<p>最后，当我们从MySQL分片集群中迁移后，IOps大约减少了30%。</p>
+
+<p>我们希望通过我们学到的教训帮助其他人。</p>
+<p>原文地址:engineering.pinterest.com/post/55272557617/building-a-follower-model-from-scratch</p>

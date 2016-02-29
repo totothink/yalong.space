@@ -1,0 +1,247 @@
+---
+layout: post
+title: 'Bitly: 构建分布式系统的经验教训'
+date: '2014-07-20T14:38:00+08:00'
+tags:
+- Bitly
+- "分布式系统"
+tumblr_url: http://yalong.tumblr.com/post/92310412190/bitly-构建分布式系统的经验教训
+---
+<div>
+<div>你想知道<a href="http://bitly.is/1g3AhR6">bitly</a>如何赚钱吗？ <a href="http://en.wikipedia.org/wiki/URL_shortening">URL 缩短器</a> 并不是很难写，对不对？ </div>
+<div><a href="http://linkd.in/1nt6KTN">Sean O'Connor</a>, bitly应用开发者Lead在<a href="http://devslovebacon.com/">Bacon conference</a>上回答了如何赚钱的问题。</div>
+<div></div>
+<div>写一个URL缩短器是容易的，但要写一个可扩展、高可用性的URL缩短器并不容易。</div>
+<div></div>
+<div>Bitly并不从短网址服务赚钱，它通过分析产品赚钱。帮助客户理解他的网站用户都在关注什么。</div>
+<div></div>
+<div></div>
+<div>分析产品作为后台服务抓取Web服务器日志。日志包含的数据来自带cookie数据的被注释链接，它指示链接被点击的页面，谁点击它，链接是什么，等等。最后所有的链接都返回到网站的域名。链接到一个不同的域并且能够被第三方机构分析的想法是一件可怕的事情，但它也是一个天才的想法。</div>
+<div></div>
+<div>虽然谈论的不是bitly的架构，它是对分布式系统本质的探索以及如何解决比他们更大的问题。</div>
+<div></div>
+<div></div>
+<div>我最喜欢的经验是他谈话中讲到的：</div>
+<div></div>
+<div>     SOA + 队列 + 异步消息真的很强。<span>这种方法分离组件，让工作能并发，让盒子失败独立，同时推出组件更容易。</span></div>
+<div></div>
+<div></div>
+<div>我也真的喜欢他解释为什么事件风格的消息要比命名风格的消息更好。这种方式之前没有听说过。</div>
+<div></div>
+<div>Sean的谈话来自真实的经验。如果你正尝试从一个盒子的思维跳跃到多个盒子的思考方法，这次谈话非常值得关注。</div>
+<div></div>
+<div>因此，让我们来看看Sean对于分布式系统说了什么。</div>
+
+<h2>统计数据</h2>
+<ul><li>
+<p>每月60亿点击量</p>
+</li>
+<li>
+<p>每月6亿短链接</p>
+</li>
+<li>
+<p>50人的公司，大约20名工程师</p>
+</li>
+<li><span>400多台服务器。大约30台服务器处理所有从外部进来的流量（包括短链接、重定向、API请求，Web UI等）。其余的400台处理存储和组织用户数据，或者提供各种形式的处理和分析（数据库、指标、网页抓取、文本分析，等等）。</span></li>
+<li>
+<p>每月抓取1亿网页。</p>
+</li>
+</ul><h2>来源</h2>
+<ul><li>
+<p><a href="http://devslovebacon.com/conferences/bacon-2014/talks/lessons-learned-building-distributed-systems-at-bitly">LESSONS LEARNED BUILDING DISTRIBUTED SYSTEMS AT BITLY</a></p>
+</li>
+</ul><h2>平台<span> </span></h2>
+<div></div>
+<div>注意，这里只是谈话中提到的，不是全面的列表。</div>
+<ul><li>
+<p>HDFS</p>
+</li>
+<li>
+<p>S3</p>
+</li>
+<li>
+<p>Nagios</p>
+</li>
+<li>
+<p>实时分布式消息系统：<span><a href="https://github.com/bitly/nsq">Nsq</a></span></p>
+</li>
+<li>
+<p>使用<a href="https://github.com/bitly/go-hostpool">hostpool</a> 管理主机池</p>
+</li>
+<li>
+<div><span>谈话最后被剪掉，但它提到了bitly使用相对多不同的数据库</span></div>
+<div></div>
+<div></div>
+</li>
+</ul><h2>分布式系统的本质</h2>
+<ul><li>真正的高可用性本质上是分布式的。实现一定水平的可用性你必须有地理的差异。你在不同的地区分布了独立的操作系统。</li>
+<li>
+<div>创建分布式系统的老式方法。通过抽象来模拟而不需要实际的分布式。</div>
+<ul><li>
+<p><a href="http://www.netapp.com/cn/">NetApp</a>, 创造一种无限大磁盘的错觉。</p>
+</li>
+<li>
+<p>Oracle，高可用性数据库，它模拟一个不同于现实的世界。 </p>
+</li>
+<li>
+<p>两者都解决问题，做的方式有所不同，但两者都很贵。</p>
+</li>
+</ul></li>
+<li>
+<p>新方法。通过接受分布式系统的固有特性解决问题，并对它们进行抽象来构建工具。</p>
+<ul><li>显著转变在于你如何看待事情。由于你抽象的和实际要构建的结合非常紧密，你可以更好的权衡，做事也更有效。</li>
+</ul></li>
+<li>
+<p>4盒(box)1x内存总是要比1盒4x内存便宜。分布式系统的言下之意是用这种方式实现扩展和达成高可用性。</p>
+</li>
+<li>
+<p>当你从一台机器到多台机器时，分布式系统问题会发生。</p>
+<ul><li>
+<p><strong>组件并发（Concurrency of components）</strong>. 机器A和机器B同时工作，你就得到了水平扩展。强大，但代价是需要在机器之间进行协调。例如，当数据锁定时，其他盒子(boxes)需要等待时，就不是并发了。</p>
+</li>
+<li>
+<p><strong>缺乏全局时钟（Lack of a global clock）</strong>. 每个盒子都有一个不完美的时钟。每台机器都有自己的时间。这意味着在不同机器上发生的事件不能基于时间排序。例如bitly， 如果事件发生相差一两秒内，是不知道它们谁先发生的。</p>
+</li>
+<li>
+<p><strong>独立失败（Independent failure）</strong>. 如果盒子A失败了，盒子B将继续工作。</p>
+</li>
+</ul></li>
+<li>
+<div><span>有些问题，像要分析的数据超越了一台机器的能力，或 无论如何这种机器不会被列入预算。</span></div>
+<div></div>
+<div></div>
+</li>
+</ul><h2>实现分布式系统的策略</h2>
+
+<h3>面向服务的架构（SOA）</h3>
+<div></div>
+<div>Bitly没有统一的应用程序。它由许多小服务组成，它们之间通过网络进行通信。</div>
+<div></div>
+<ul><li>
+<p>它是一种抽象，类似于代码的函数， 但它是系统级别的。</p>
+</li>
+<li>
+<p>在你的大脑里不需要保留系统的细节。只需要关注API的边界和合约（contacts）。</p>
+</li>
+<li>
+<p>强大的开发和运营。</p>
+</li>
+<li>
+<p>Bitly已经6年了，有大量代码。你不需要看每行代码，你只需要使用服务。</p>
+</li>
+<li>
+<p>精心设计的服务仅仅只有几百行代码。</p>
+</li>
+<li>
+<p>运维很容易知道系统哪里出问题了。然后深入系统发现问题。</p>
+</li>
+<li>
+<div><span>失败意味着减少功能而不是停机。通常每个服务被设计成解决特到问题。因为它们和自己的持久化层完全隔离，如果它们中的一个失败，那么仅是不能解决这个问题，其它服务仍在。</span></div>
+<div></div>
+</li>
+</ul><h3>异步消息</h3>
+
+<ul><li>
+<p>发送消息，无需等待答复。</p>
+</li>
+<li>在组件之间<span>下降(drop)到一个队列</span><span>很容易。假设盒子A向盒子B发送消息，如果B有问题，消息将被排队，当B恢复后继续处理。</span></li>
+<li>在错误处理时有更多选择。如果一个盒子坏了，消息将被稍后处理。盒子A不需要知道或关心盒子B的麻烦。</li>
+<li>
+<p>缺点在于当操作执行时同步请求是一个更自然的模型。</p>
+</li>
+<li>
+<p>URL缩短器请求是一个完全同步过程，因为：</p>
+<ul><li>
+<p><strong>速度（Speed）</strong>。 希望尽快答复。例如，不希望通过使用消息队列进行处理。</p>
+</li>
+<li>
+<p><strong>一致性（Consistency）</strong>。不希望把同一个短链接给多个用户。宁可给一个错误也比给一个不能用的链接要好。</p>
+</li>
+</ul></li>
+<li>
+<p>指标系统完全异步。当一个bitly链接被点击时，指标系统翻译并通过HTTP返回。数据的转换被推到分析系统和其他下游系统的队列中。即使指标的处理有一点延时，这并不是世界末日。</p>
+</li>
+<li>
+<p>消息可以被认为是命令或事件。</p>
+<ul><li>
+<p>命令描述 “做什么.”</p>
+</li>
+<li>
+<p>事件描述 “什么发生了.”</p>
+</li>
+</ul></li>
+<li>
+<p>事件是比命令更有用的抽象。</p>
+<ul><li>
+<p><strong>允许更好的隔离系统（Allows for better isolation between systems）</strong>. 命令意味着有谁接收命令的知识，否则毫无意义。说某件事发生了意味着你不需要关心谁将消费这条消息。仅是通知什么发生了，其它服务可以增加统计数据或做任何事情。</p>
+</li>
+<li>
+<p><strong>事件自然映射到多个消费者处理消息（Events naturally map to having multiple consumers process messages）</strong>。当一个bitly URL被解码为一个HTTP重定向消息发送给多个服务：存档服务，它们被存到HDFS和S3，实时分析服务， 长期历史分析，注释服务。解码服务只负责发布事件，并不知道有哪些下游服务。下游服务只获取事件，并不关心谁发送的。</p>
+</li>
+<li>
+<p><strong>添加新消费者很容易</strong>。新服务被创建并且注册事件（register for events），生产者并不知道或关心。服务处理过程的改变也不是生产者关心的。生产者和消费者是被隔离的，只通过事件指定的约定进行连接。</p>
+</li>
+</ul></li>
+</ul><h2>让服务发挥更好(Making Services Play Nice)</h2>
+<ul><li>
+<p><strong>服务间使用背压（Use backpressure between services）</strong>. 如果一个服务繁忙，它应该告诉其它请求服务扼杀它们的请求，从而减轻陷入困境服务的负载。例如指数退回(exponential backoff)， 有助于防止级联错误。也有助于系统快速恢复。例如：一个服务依赖缓存服务需要一个预热期，如果在预热期间，请求服务不能返回，那么将从数据库中获取。</p>
+</li>
+<li>
+<p><strong>绕过失败（Route around failures）</strong>. 例如，服务间的均衡负载。Bitly使用<span> </span><a href="https://github.com/bitly/go-hostpool">hostpool</a><span> 管理主机池。客户端要求主机服务。 如果请求失败，客户端告诉hostpool。通过这个反馈，hostpool可以管理主机分配，路由到健康的主机上。</span></p>
+</li>
+</ul><h2>监控</h2>
+<ul><li>
+<p>当只有一两台服务器时，并不难知道哪台有问题，但当有数百台服务器时，你需要监控来帮忙。</p>
+</li>
+<li>
+<p><strong>使用类似Nagios的工具检查服务器是否健康</strong>. </p>
+</li>
+<li>
+<p><strong>运行完整性检查</strong>. 例如，服务有响应，但返回的数据是不正确的。</p>
+</li>
+<li><strong>集中日志（Centralized logging）</strong><span>. 它是重要的，因为能跨多个主机检测失败。如果一个用户导致你所有错误，通过机器与机器之间的跳跃(Hopping)来检测问题是困难的。集中日志更容易检测整体性问题，像所有错误都来自同一个IP地址。</span></li>
+<li>
+<p><strong>人机界面（Human interfaces）</strong>. 如何让恰当的人在恰当的时间获得恰当的信息。如何通过工具暴露信息？</p>
+<ul><li>
+<div>Nsq，它有很好的管理界面，提供有关队列行为的反馈。</div>
+<div></div>
+</li>
+<li>
+<p>部署系统WebUI。使得部署变得简单并且能查看部署历史。</p>
+</li>
+</ul></li>
+</ul><h2>经验教训</h2>
+<ul><li>
+<p><strong>知识就是力量（Knowledge is power）</strong>. 越理解所做的事情越能作出更有效的决策。效果意味着能用更低的代价做更大、更快的系统。</p>
+</li>
+<li>
+<p><strong>构建东西处理抽象层漏洞。</strong>如果你使用的抽象层隐藏了系统的分布式特性，它最终将成为泡沫。代码必须理解和处理任何漏洞。</p>
+</li>
+<li>
+<p><strong>如果可能就放在一个盒子里</strong>。如果不需要分布式系统就不要构建它。分布式系统复杂而昂贵的。</p>
+</li>
+<li>
+<p><strong>SOA失败意味着减少功能而不是停机。</strong></p>
+</li>
+<li>
+<p><strong>SOA + queues + async messaging真的很强大</strong>. 这种方法分离组件，让工作能并发，让盒子失败独立，同时推出组件更容易。</p>
+</li>
+<li>
+<p><strong>当速度和一致性最重要时，使用同步请求。</strong>宁可给用户一个错误，也不愿给用户慢的或错误的回答。 </p>
+</li>
+<li>
+<p><strong>事件风格的消息比命令风格的消息更好。</strong>它们能更好的隔离系统，天然的支持多消费者。有助于保持服务的专注，不必去担心那些超出服务所支持的事。</p>
+</li>
+<li>
+<p><strong>注释而非过滤（Annotate rather than filter）</strong>.　过滤器在生产者层面做假设下游服务关心什么的事情。例如公开链接和私有链接。过滤私有链接流出意味着它们需要获得感兴趣的私有链接将不能获得。 相反，注释一个事件的事实，链接私有或公开让服务在操作时去关心。</p>
+</li>
+<li>
+<p><strong>服务应该互相发挥好（Services should play nice with each other）</strong>. 使用背压防止服务过载以及绕行失败的服务。</p>
+</li>
+<li>
+<p><strong>如果没有Nagios检查，它肯定破了。</strong> 只是你不知道而已。</p>
+</li>
+<li>
+<p><strong>工具应该给人提供有用的信息。</strong> 在恰当的时间为恰当的人提供恰当的信息。</p>
+</li>
+</ul></div>

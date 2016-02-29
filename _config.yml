@@ -1,0 +1,43 @@
+title: aaron | tech blog
+locale: en_US
+url:
+markdown: kramdown
+sass:
+  sass_dir: _sass
+  style: compressed
+gems:
+  - jekyll-paginate
+  - jekyll-sitemap
+  - jekyll-redirect-from
+kramdown:
+  input: GFM
+owner:
+  name: 张亚龙
+  avatar: blog.jpeg
+  bio: "aka Aaron. a rubyist."
+  email: yalong1976@gmail.com
+  disqus-shortname: yalongdotspace-code
+  twitter: totothink
+  facebook:
+  google:
+    plus:
+    analytics: 
+    verify:
+    ad-client:
+    ad-slot:
+  bing-verify:
+  github: totothink
+  stackoverflow:
+  linkedin: 
+  instagram:
+  lastfm:
+  tumblr:
+  pinterest: pinterestaaron
+  foursquare:
+  steam:
+  dribbble:
+  youtube:
+  soundcloud:
+paginate: 30
+google_custom_search: 
+suggest_url: 

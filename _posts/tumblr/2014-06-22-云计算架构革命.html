@@ -1,0 +1,65 @@
+---
+layout: post
+title: "云计算架构革命"
+date: '2014-06-22T00:37:00+08:00'
+tags:
+- "云计算"
+tumblr_url: http://yalong.tumblr.com/post/89465210170/云计算架构革命
+---
+<div>
+<div>云计算技术的引入不是简单的演进，而是一场真正的革命。像所有的革命一样，它改变了看法(points of views)并重新定义所有的含义。<span> 一切和之前大不相同</span>。本贴希望分析一些在传统架构中经常使用的关键词和概念，根据云计算的观点重新定义它们。</div>
+<div></div>
+<div>理解新词汇的意思对于掌握纯云计算（pure cloud）架构的本质是至关重要的。</div>
+<blockquote>
+<div>&lt;&lt;<em>There is no greater impediment to the advancement of knowledge than the  of words.（</em>没有比模棱两可<em>的词汇更阻碍知识的提升）</em>&gt;&gt;</div>
+</blockquote>
+<blockquote>
+<div>THOMAS REID, Essays on the Intellectual Powers of Man</div>
+</blockquote>
+<div>现在，需要挑战传统架构的极限，它超越了普通意义上的可伸缩性（<span>scalability</span>）概念，支持每天数百万用户（Whats Up 5亿），数十亿的交易（Salesforce 13亿），5个9的高可用性（99.999 AOL）。</div>
+<div></div>
+<div>我希望在坐的各位引用上面成功的例子，但不要认为这是完全不可能达到的。使用云计算技术，每个人只需要一点点投资就能创建一个服务并马上拥有一个世界舞台。一旦成功，架构必须能够有相称的规模。</div>
+<div></div>
+<div>使用相同的设计标准或移动当前配置到云根本不能工作，它会暴露出不愉快的意外（<span>unpleasant surprises）</span>。</div>
+<div><br/><strong>基础架构(infrastructure) —— 商业硬件（commodity HW）替代高端硬件（</strong><strong>high-end HW）</strong></div>
+<div>这是理解云计算架构的第一个令人震惊的概念。忘记高可用性、高性能硬件。最大的云计算服务提供商（像Amazon或Azure）使用商业硬件，因此比传统环境更容易出现故障和其它问题。</div>
+<div>不管怎么样，这种硬件问题并不妨碍有高可用性和高性能需求的企业应用使用云。它只需要按照应变能力（<span>resilience</span>）标准和分布式标准进行重新设计架构。</div>
+<div><br/><strong>可伸缩性（Scalability）—— 动态替代静态</strong><br/> 可伸缩性是好的架构设计重要特性之一，即使是在传统方法中也是如此。不管怎么说，架构的伸缩是一个特殊事件，它需要计划、预算分配、新硬件购买以及系统的重新配置。这导致应该在应用程序或服务必须支持的最大负载大小和时间之上实现稳定的架构。</div>
+<div>在云中，所有资源都是被虚化的（dematerialized），它们可以按需请求并按小时计费。硬件资源通过API（应用程序接口）采用高层级抽象进行管理，因此能自动的分配或取消分配任何资源。</div>
+<div>现在，架构必须<span>根据需要进行调整，能够通过添加新节点扩张或收缩。它必须能够在高峰时段或一年中的某些时段使用大量节点，在低谷时段使用少量节点。很明显，架构必须能意识到这些变化并作出相应的调整。</span></div>
+<div><span> </span></div>
+<div><strong>可用性（Availability）—— 应变能力(</strong><strong>resiliency)</strong><strong>替代无故障(no failure)</strong></div>
+<div>传统架构考虑资源总是可用的。资源不可用既不是需要的活动也不是被计划的，换句话说，它是一个异常。在云中，资源不可用不再是个特殊事件，因为使用商业硬件或由于资源，例如App Server突然不在和希望缩减的原因都有可能导致资源不可用。</div>
+<div>架构必须能够处理瞬态故障（transient failure）：遇到的问题应该被编程以作出适当的反应并完成事务。换句话说，它必须有应变能力。</div>
+<div>在最先进的云计算架构中，也有一些代理，旨在在生产环境中故意产生故障，以确保应用程序能够作出适当的反应。著名的有Netflix公司的混沌猴子（Chaos Monkey）。 </div>
+<div>获得应变能力的一个好方法是实现队列系统，使得应用的组件解耦和自治。</div>
+<div>下面的例子中，Web角色提交一个请求到队列，再由woker角色进行处理。当worker角色接收一个请求，虽然其他worker角色不再处理它，它也不完全移除。若处理的worker角色在规定的时间内没有反馈，worker角色突然中止，请求应该再次出现在队列里由另外的worker角色处理。</div>
+<div><a href="http://2.bp.blogspot.com/-C7mFr9O6lvA/U2v8EIV9sNI/AAAAAAAACZ0/pjInaJHDK7U/s1600/Queue.png"><img alt="image" border="0" height="206" src="http://2.bp.blogspot.com/-C7mFr9O6lvA/U2v8EIV9sNI/AAAAAAAACZ0/pjInaJHDK7U/s1600/Queue.png" width="640"/></a></div>
+<div><br/><br/><strong>性能(Performance) - 分解(decomposition)和分布式(distribution)替代压力（stress）</strong></div>
+<div></div>
+<div>云计算架构相当易受技术自身的固有性能约束影响，例如资源的非邻近（non-proximity），商业硬件或资源分享。</div>
+<div>有关资源的压力(stress)的方法不再可用，像提高IOPS、带宽、处理器速度或内存大小。在云中，纵向扩展（Scale-up）是非常有限的，某些情况下是不可能的。宁可增强架构的单个组件，不同模块的架构分解被部署在跨多个节点上是改善性能的关键。</div>
+<div>传统上，系统只有在需要的时候才会考虑可伸缩，增加请求和节点，性能保持不变。可伸缩性被作为性能的一个功能定义。</div>
+<div>在新的云架构中，这个比例应该反过来，可伸缩性必须被折叠(folded)以实现更好的性能。为了有更好的表现，想法是细分计算成本。<br/><br/> 这种方法必须被采纳，不仅仅是应用层，数据层通过数据分片允许数据库分布式，因此多个节点上负载，每个节点管理特定部分的数据。</div>
+<div>甚至为确保有助于改善架构性能，在所有层级使用缓存系统也是明智的选择（应用程序缓存或Amazon ElasticCache，防火墙上的网络Cache以及CDN）</div>
+<div></div>
+<div><a href="http://1.bp.blogspot.com/-OdWvtthXrg4/U2v8hVLpnsI/AAAAAAAACZ8/zDCYNrnoJoQ/s1600/decomposition.png"><img alt="image" border="0" height="240" src="http://1.bp.blogspot.com/-OdWvtthXrg4/U2v8hVLpnsI/AAAAAAAACZ8/zDCYNrnoJoQ/s1600/decomposition.png" width="640"/></a></div>
+<div></div>
+<div><br/><strong>可靠性(Reliability) - 平均修复时间(MTTR)替代平均故障间隔时间(MTBF)</strong></div>
+<div>传统上, 架构的可靠性与MTBF概念相关。使用商业服务器，它不再被认为是可以实现的目标。</div>
+<div>因此，有必要反思可靠性的概念，把它与应变能力相连接。一个云计算架构当它的MTTR越低就越可靠。MTTR等于或接近于零时会获得一个高可靠的架构和应变任何失败的能力</div>
+<div></div>
+<div><a href="http://4.bp.blogspot.com/-g4sMRwfrnvc/U2v87O7NyeI/AAAAAAAACaE/eE52Z9wBZ5c/s1600/MTTR-MTBF.png"><img alt="image" border="0" height="288" src="http://4.bp.blogspot.com/-g4sMRwfrnvc/U2v87O7NyeI/AAAAAAAACaE/eE52Z9wBZ5c/s1600/MTTR-MTBF.png" width="640"/></a></div>
+<div></div>
+<div><br/><strong>容量规划(Capacity Planning) - scale unit </strong><strong>planning 替代最坏打算(</strong><strong>worst case planning)</strong></div>
+<div></div>
+<div><span>传统架构中容量规划旨在估计支持最大负载所需的大小,以便系统能够应对最糟糕的情况。在系统生命周期的绝大部分时间里不可避免地浪费大量资源。相比之下,云计算架构的容量规划是面向确定规模单位,即通过scale up或scale down满足负载，可能是自动化的。</span></div>
+<div></div>
+<div><a href="http://2.bp.blogspot.com/-u2VJyYAUa8o/U2v9Unt3McI/AAAAAAAACaM/qWofwtOWwJM/s1600/capacity+planning.png"><img alt="image" border="0" height="260" src="file:///C:/DOCUME~1/ADMINI~1/LOCALS~1/Temp/enhtmlclip/Image.png" width="640"/></a></div>
+<div></div>
+<div>我们已经看到云计算架构为了需要响应不同的场景是如何背离过去事情的。过去使用的方法不再有效，架构下的基础概念，例如可伸缩性，性能，可靠性，容量规划被深刻反思。总结云计算架构正确设计的黄金法则，我们可以明确定义：</div>
+<div></div>
+<div><br/><strong>允许伸缩（Enable Scaling）</strong> <em>- 能适应环境条件</em><br/><br/><strong>等待失败（Expect Failure）</strong><em> - 能采取应变的态度</em><br/><br/> 在实际的云计算架构设计和实现中总是坚持上面的法则。<br/><br/> 就到这里，未来可能会分析一些云计算世界里的典型设计技术。</div>
+<div></div>
+<div>原文地址： http://highscalability.com/blog/2014/6/5/cloud-architecture-revolution.html</div>
+</div>
