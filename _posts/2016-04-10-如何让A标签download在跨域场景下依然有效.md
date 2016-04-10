@@ -34,7 +34,7 @@ tags: [一课吧, 实战技巧, Web开发]
 
 这是非常不错的选择，但别忙着开心，上面的HTML5代码是不能工作的，除非你的图片源和你的网站同源。
 
-是的，同源策略导致download失效！但图片云不受我们控制，我们怎么办呢？
+是的，[同源策略](https://en.wikipedia.org/wiki/Same-origin_policy)导致download失效！但图片云不受我们控制，我们怎么办呢？
 
 反向代理强制同源 —— 可用但不完美的解决方案。
 
@@ -58,5 +58,5 @@ tags: [一课吧, 实战技巧, Web开发]
 
 参考资源:
 
-  * http://www.w3schools.com/tags/att_a_download.asp
-  * http://w3c.github.io/html/links.html#downloading-resources
+  * [http://www.w3schools.com/tags/att_a_download.asp](http://www.w3schools.com/tags/att_a_download.asp)
+  * [http://w3c.github.io/html/links.html#downloading-resources](http://w3c.github.io/html/links.html#downloading-resources)
